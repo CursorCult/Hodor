@@ -15,4 +15,12 @@ Hodor enforces a single, continuous thread of traceability across the entire sof
 - **Predictability over cleverness:** Prefer simple, verifiable designs that are easy to trace and test.
 - **Risk-based rigor:** Apply stricter traceability and verification to higher-criticality components.
 
+## Required artifacts
+
+- **Requirements live in specs:** Requirements remain in `docs/specifications/` with stable IDs.
+- **Trace items are explicit:** Doorstop-style YAML items (uid/text/links) exist for requirements and tests.
+- **Tests show satisfaction:** Test items list `References:` pointing to the verifying test files/functions.
+- **Audit report is required:** CI regenerates the audit report using `scripts/build_traceability_audit.py` and publishes it under `docs/traceability/`.
+- **No stock site:** The custom audit report is the authoritative traceability view.
+
 Hodor is language-agnostic and applies to all non-test source code and its associated verification evidence.

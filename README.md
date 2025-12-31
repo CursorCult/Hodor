@@ -27,13 +27,44 @@ Rule file format reference: https://cursor.com/docs/context/rules#rulemd-file-fo
 - Predictable, verifiable designs over cleverness.
 - Risk-based rigor: stricter traceability for higher-criticality components.
 
+**Project layout (recommended)**
+
+```
+docs/specifications/           # requirement source of truth (with stable IDs)
+docs/specifications/requirements/<domain>/  # requirement items (MON-001, etc.)
+tests/api/                     # test items (TST-001, with References to tests)
+docs/traceability/traceability_audit.html
+```
+
+**Traceability items**
+
+Hodor expects Doorstop-style YAML items with:
+- `uid` (stable identifier)
+- `text` (requirement or test intent)
+- `links` (IDs of related items)
+- `References:` list (for test items, pointing to test files/functions)
+
 **Background**
 
 Hodor is inspired by NASA's "golden thread" principle in Safety and Mission Assurance and software requirements such as NPR 7150.2 (SWE-052). Related guidance includes the NASA Software Engineering Handbook and NASA-STD-8739.8 (Software Assurance).
 
 **Tooling**
 
-Hodor expects a traceability system (e.g., Doorstop or an RTM) to maintain links. A simple config-driven verification script is planned but not included in this draft.
+Hodor ships a generator for an audit-ready HTML report:
+
+```
+python3 .cursor/rules/Hodor/scripts/build_traceability_audit.py \
+  --root . \
+  --req-dir docs/specifications/requirements/mon \
+  --test-dir tests/api \
+  --out docs/traceability/traceability_audit.html
+```
+
+Requires: Python + PyYAML (`pip install pyyaml`).
+
+**CI integration**
+
+Run the generator in CI and commit the updated HTML report, similar to how coverage stats are injected into README.md.
 
 **Credits**
 
