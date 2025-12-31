@@ -35,11 +35,6 @@ Hodor is inspired by NASA's "golden thread" principle in Safety and Mission Assu
 
 Hodor expects a traceability system (e.g., Doorstop or an RTM) to maintain links. A simple config-driven verification script is planned but not included in this draft.
 
-**Supersedes**
-
-- DesignToTest
-- SpecsFirst
-
 **Credits**
 
 - Developed by Will Wieselquist. Anyone can use it.
