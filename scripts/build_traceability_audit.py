@@ -579,6 +579,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--root", default=".", help="Project root containing item directories.")
     parser.add_argument(
+        "--display-root",
+        default=".",
+        help="Display label for the project root (kept relative for audit reports).",
+    )
+    parser.add_argument(
         "--req-dir",
         action="append",
         default=[],
@@ -662,7 +667,7 @@ def extract_refs(text: str) -> list[str]:
     return refs
 
 
-def build_payload(root: Path, req_dirs: list[str], test_dirs: list[str]) -> dict:
+def build_payload(root: Path, req_dirs: list[str], test_dirs: list[str], display_root: str) -> dict:
     reqs = load_items(root, req_dirs, "Requirement")
     tests = load_items(root, test_dirs, "Test")
 
@@ -712,7 +717,7 @@ def build_payload(root: Path, req_dirs: list[str], test_dirs: list[str]) -> dict
 
     return {
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ"),
-        "source_root": str(root),
+        "source_root": display_root,
         "summary": summary,
         "requirements": reqs,
         "tests": tests,
@@ -727,7 +732,7 @@ def main() -> int:
     test_dirs = args.test_dir or DEFAULT_TEST_DIRS
     out_path = Path(args.out) if args.out else root / "visual" / "traceability_audit.html"
 
-    payload = build_payload(root, req_dirs, test_dirs)
+    payload = build_payload(root, req_dirs, test_dirs, args.display_root)
     data_json = json.dumps(payload, ensure_ascii=True).replace("</", "<\\/")
     html = (
         TEMPLATE.replace("__DATA_JSON__", data_json)
