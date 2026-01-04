@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +13,21 @@ import yaml
 
 DEFAULT_REQ_DIRS = ["reqs/mon"]
 DEFAULT_TEST_DIRS = ["reqs/tst"]
+DEFAULT_TEST_SCAN_DIRS: list[str] = []
+SCAN_SKIP_DIRS = {
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+    "dist",
+    "build",
+}
+DIRECTIVE_RE = re.compile(
+    r"^\s*(?:#|//|--|;|/\*+|\*+)?\s*(HODOR-[A-Z-]+)\s*:\s*(.*)$"
+)
 SKIP_NAMES = {
     ".doorstop.yml",
     "doorstop.yml",
@@ -392,7 +409,7 @@ TEMPLATE = r"""<!doctype html>
       <div class="matrix" id="matrix"></div>
     </section>
 
-    <div class="footer">Audit view generated from Doorstop item files.</div>
+    <div class="footer">Audit view generated from requirement items and in-test HODOR annotations.</div>
   </div>
 
   <script id="data" type="application/json">__DATA_JSON__</script>
@@ -574,7 +591,7 @@ TEMPLATE = r"""<!doctype html>
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a traceability audit HTML report from Doorstop items.",
+        description="Build a traceability audit HTML report from requirement items and test annotations.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--root", default=".", help="Project root containing item directories.")
@@ -593,7 +610,13 @@ def parse_args() -> argparse.Namespace:
         "--test-dir",
         action="append",
         default=[],
-        help="Test item directory, relative to root. Can be repeated.",
+        help="Test item directory (Doorstop YAML), relative to root. Can be repeated.",
+    )
+    parser.add_argument(
+        "--test-scan-dir",
+        action="append",
+        default=[],
+        help="Directory to scan for in-test HODOR metadata comments. Can be repeated.",
     )
     parser.add_argument(
         "--out",
@@ -649,6 +672,92 @@ def load_items(root: Path, rel_dirs: list[str], label: str) -> list[dict]:
     return items
 
 
+def split_list(value: str) -> list[str]:
+    return [part.strip() for part in value.replace(";", ",").split(",") if part.strip()]
+
+
+def iter_scan_files(dir_path: Path) -> list[Path]:
+    files: list[Path] = []
+    for root, dirs, names in os.walk(dir_path):
+        dirs[:] = sorted(d for d in dirs if d not in SCAN_SKIP_DIRS)
+        for name in sorted(names):
+            files.append(Path(root) / name)
+    return files
+
+
+def parse_hodor_blocks(lines: list[str], path_label: str) -> list[dict]:
+    blocks: list[dict] = []
+    current: dict | None = None
+    for line_no, line in enumerate(lines, start=1):
+        match = DIRECTIVE_RE.match(line)
+        if match:
+            directive = match.group(1).strip()
+            value = match.group(2).strip()
+            if current is None:
+                current = {"id": None, "reqs": [], "refs": [], "text": [], "start_line": line_no}
+            if directive == "HODOR-ID":
+                current["id"] = value
+            elif directive == "HODOR-REQS":
+                current["reqs"].extend(split_list(value))
+            elif directive in {"HODOR-REF", "HODOR-REFS"}:
+                current["refs"].extend(split_list(value))
+            elif directive == "HODOR-TEXT":
+                if value:
+                    current["text"].append(value)
+            else:
+                raise ValueError(f"Unknown HODOR directive '{directive}' in {path_label}:{line_no}")
+            continue
+        if current is not None:
+            blocks.append(current)
+            current = None
+    if current is not None:
+        blocks.append(current)
+    return blocks
+
+
+def load_test_annotations(root: Path, rel_dirs: list[str]) -> list[dict]:
+    items: list[dict] = []
+    seen: set[str] = set()
+    for rel_dir in rel_dirs:
+        dir_path = (root / rel_dir).resolve()
+        if not dir_path.exists():
+            raise FileNotFoundError(f"Test scan directory not found: {dir_path}")
+        for file_path in iter_scan_files(dir_path):
+            try:
+                content = file_path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            blocks = parse_hodor_blocks(content.splitlines(), str(file_path))
+            if not blocks:
+                continue
+            try:
+                rel_path = file_path.relative_to(root)
+            except ValueError:
+                rel_path = file_path
+            rel_label = str(rel_path)
+            for block in blocks:
+                reqs = block["reqs"]
+                if not reqs:
+                    raise ValueError(f"Missing HODOR-REQS in {rel_label}:{block['start_line']}")
+                test_id = block["id"] or f"{rel_label}#L{block['start_line']}"
+                if test_id in seen:
+                    raise ValueError(f"Duplicate test id '{test_id}' in {rel_label}")
+                seen.add(test_id)
+                text = "\n".join(block["text"]).strip()
+                if not text:
+                    text = f"Traceability marker in {rel_label}"
+                items.append(
+                    {
+                        "id": test_id,
+                        "text": text,
+                        "links": reqs,
+                        "path": rel_label,
+                        "refs": block["refs"],
+                    }
+                )
+    return items
+
+
 def extract_refs(text: str) -> list[str]:
     refs: list[str] = []
     lines = [line.rstrip() for line in text.splitlines()]
@@ -667,15 +776,29 @@ def extract_refs(text: str) -> list[str]:
     return refs
 
 
-def build_payload(root: Path, req_dirs: list[str], test_dirs: list[str], display_root: str) -> dict:
+def build_payload(
+    root: Path,
+    req_dirs: list[str],
+    test_item_dirs: list[str],
+    test_scan_dirs: list[str],
+    display_root: str,
+) -> dict:
     reqs = load_items(root, req_dirs, "Requirement")
-    tests = load_items(root, test_dirs, "Test")
+    item_tests = load_items(root, test_item_dirs, "Test") if test_item_dirs else []
+    scan_tests = load_test_annotations(root, test_scan_dirs) if test_scan_dirs else []
+    tests = item_tests + scan_tests
 
     req_map = {r["id"]: r for r in reqs}
     test_map = {t["id"]: t for t in tests}
 
+    seen_test_ids: set[str] = set()
     for test in tests:
-        test["refs"] = extract_refs(test["text"])
+        test_id = test["id"]
+        if test_id in seen_test_ids:
+            raise ValueError(f"Duplicate test id '{test_id}'")
+        seen_test_ids.add(test_id)
+        if "refs" not in test:
+            test["refs"] = extract_refs(test["text"])
 
     link_set: set[tuple[str, str]] = set()
     for test in tests:
@@ -729,10 +852,11 @@ def main() -> int:
     args = parse_args()
     root = Path(args.root).resolve()
     req_dirs = args.req_dir or DEFAULT_REQ_DIRS
-    test_dirs = args.test_dir or DEFAULT_TEST_DIRS
+    test_item_dirs = args.test_dir or DEFAULT_TEST_DIRS
+    test_scan_dirs = args.test_scan_dir or DEFAULT_TEST_SCAN_DIRS
     out_path = Path(args.out) if args.out else root / "visual" / "traceability_audit.html"
 
-    payload = build_payload(root, req_dirs, test_dirs, args.display_root)
+    payload = build_payload(root, req_dirs, test_item_dirs, test_scan_dirs, args.display_root)
     data_json = json.dumps(payload, ensure_ascii=True).replace("</", "<\\/")
     html = (
         TEMPLATE.replace("__DATA_JSON__", data_json)

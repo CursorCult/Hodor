@@ -18,8 +18,8 @@ Hodor enforces a single, continuous thread of traceability across the entire sof
 ## Required artifacts
 
 - **Requirements live in specs:** Requirements remain in `docs/specifications/` with stable IDs.
-- **Trace items are explicit:** Doorstop-style YAML items (uid/text/links) exist for requirements and tests.
-- **Tests show satisfaction:** Test items list `References:` pointing to the verifying test files/functions.
+- **Trace items are explicit:** Requirements use Doorstop-style YAML items (uid/text/links).
+- **Tests show satisfaction:** Tests embed HODOR metadata comments that link to requirement IDs and (optionally) test references.
 - **Audit report is required:** CI regenerates the audit report using `scripts/build_traceability_audit.py` and publishes it under `docs/traceability/`.
 - **No stock site:** The custom audit report is the authoritative traceability view.
 

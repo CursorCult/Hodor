@@ -32,17 +32,26 @@ Rule file format reference: https://cursor.com/docs/context/rules#rulemd-file-fo
 ```
 docs/specifications/           # requirement source of truth (with stable IDs)
 docs/specifications/requirements/<domain>/  # requirement items (MON-001, etc.)
-tests/api/                     # test items (TST-001, with References to tests)
+tests/                         # tests with embedded HODOR metadata comments
 docs/traceability/traceability_audit.html
 ```
 
 **Traceability items**
 
-Hodor expects Doorstop-style YAML items with:
-- `uid` (stable identifier)
-- `text` (requirement or test intent)
-- `links` (IDs of related items)
-- `References:` list (for test items, pointing to test files/functions)
+Hodor expects:
+- Doorstop-style YAML items for **requirements** (`uid`, `text`, `links`).
+- In-test HODOR metadata comments for **tests** (framework-agnostic).
+
+Test annotations are line-based comment blocks with contiguous `HODOR-*` entries:
+
+```
+# HODOR-ID: TST-MON-002
+# HODOR-REQS: MON-002
+# HODOR-TEXT: Monitor status command returns schema-shaped output and handles database issues.
+# HODOR-REF: tests/unit/test_wks_api_monitor_cmd_status.py::test_cmd_status_success
+```
+
+`HODOR-ID` is optional; if omitted the scanner uses the file path and line number.
 
 **Background**
 
@@ -56,7 +65,7 @@ Hodor ships a generator for an audit-ready HTML report:
 python3 .cursor/rules/Hodor/scripts/build_traceability_audit.py \
   --root . \
   --req-dir docs/specifications/requirements/mon \
-  --test-dir tests/api \
+  --test-scan-dir tests \
   --out docs/traceability/traceability_audit.html
 ```
 
