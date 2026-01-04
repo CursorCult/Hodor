@@ -852,8 +852,13 @@ def main() -> int:
     args = parse_args()
     root = Path(args.root).resolve()
     req_dirs = args.req_dir or DEFAULT_REQ_DIRS
-    test_item_dirs = args.test_dir or DEFAULT_TEST_DIRS
     test_scan_dirs = args.test_scan_dir or DEFAULT_TEST_SCAN_DIRS
+    if args.test_dir:
+        test_item_dirs = args.test_dir
+    elif test_scan_dirs:
+        test_item_dirs = []
+    else:
+        test_item_dirs = DEFAULT_TEST_DIRS
     out_path = Path(args.out) if args.out else root / "visual" / "traceability_audit.html"
 
     payload = build_payload(root, req_dirs, test_item_dirs, test_scan_dirs, args.display_root)
