@@ -32,7 +32,7 @@ Rule file format reference: https://cursor.com/docs/context/rules#rulemd-file-fo
 ```
 docs/specifications/           # requirement source of truth (with stable IDs)
 docs/specifications/requirements/<domain>/  # requirement items (MON-001, etc.)
-tests/                         # tests with embedded HODOR metadata comments
+tests/                         # tests with Requirements blocks in docstrings
 docs/traceability/traceability_audit.html
 ```
 
@@ -40,18 +40,20 @@ docs/traceability/traceability_audit.html
 
 Hodor expects:
 - Doorstop-style YAML items for **requirements** (`uid`, `text`, `links`).
-- In-test HODOR metadata comments for **tests** (framework-agnostic).
+- Requirement IDs listed in **test docstrings** for tests (scanner-derived test items).
 
-Test annotations are line-based comment blocks with contiguous `HODOR-*` entries:
+Test docstrings include a `Requirements:` block:
 
 ```
-# HODOR-ID: TST-MON-002
-# HODOR-REQS: MON-002
-# HODOR-TEXT: Monitor status command returns schema-shaped output and handles database issues.
-# HODOR-REF: tests/unit/test_wks_api_monitor_cmd_status.py::test_cmd_status_success
+def test_cmd_status_success():
+    """Status succeeds with default config and no issues.
+
+    Requirements:
+    - MON-002
+    """
 ```
 
-`HODOR-ID` is optional; if omitted the scanner uses the file path and line number.
+Test IDs are derived from the test file path (no manual IDs).
 
 **Background**
 
